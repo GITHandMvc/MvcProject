@@ -1,0 +1,307 @@
+CREATE OR REPLACE PACKAGE hcm_staff_pck IS
+
+  -- Author  : jianmin.hong@hand-china.com
+  -- Created : 2015/2/13 15:15:45
+  -- Purpose : 员工维护处理程序包
+
+  FUNCTION insert_rows_for_ui(p_staff_num     IN VARCHAR2,
+                              p_staff_name    IN VARCHAR2,
+                              p_staff_desc    IN VARCHAR2,
+                              p_staff_phone   IN VARCHAR2,
+                              p_staff_email   IN VARCHAR2,
+                              p_sys_user_id   IN VARCHAR2,
+                              p_depet_code    IN VARCHAR2,
+                              p_start_date    IN VARCHAR2,
+                              p_end_date      IN VARCHAR2,
+                              p_remark        IN VARCHAR2,
+                              p_property_list IN VARCHAR2) RETURN VARCHAR2;
+
+  FUNCTION update_rows_for_ui(p_staff_id      IN VARCHAR2,
+                              p_staff_desc    IN VARCHAR2,
+                              p_staff_phone   IN VARCHAR2,
+                              p_staff_email   IN VARCHAR2,
+                              p_sys_user_id   IN VARCHAR2,
+                              p_depet_code    IN VARCHAR2,
+                              p_start_date    IN VARCHAR2,
+                              p_end_date      IN VARCHAR2,
+                              p_remark        IN VARCHAR2,
+                              p_property_list IN VARCHAR2) RETURN VARCHAR2;
+
+  FUNCTION del_staffs_for_ui(p_staff_id IN VARCHAR2) RETURN VARCHAR2;
+END hcm_staff_pck;
+------------------------------------------------------------------------包体--
+FUNCTION insert_rows(p_staff_num     IN VARCHAR2,
+                       p_staff_name    IN VARCHAR2,
+                       p_staff_desc    IN VARCHAR2,
+                       p_staff_phone   IN VARCHAR2,
+                       p_staff_email   IN VARCHAR2,
+                       p_sys_user_id   IN NUMBER,
+                       p_depet_code    IN VARCHAR2,
+                       p_start_date    IN DATE,
+                       p_end_date      IN DATE,
+                       p_remark        IN VARCHAR2,
+                       p_property_list IN VARCHAR2,
+                       x_staff_id      OUT NUMBER) RETURN NUMBER IS
+    ln_message_id   NUMBER := system_api_pkg.g_success;
+    lr_staff        hcm_staffs%ROWTYPE;
+    lr_property     hcm_staff_property%ROWTYPE;
+    lv_property     VARCHAR2(30);
+    lv_property_val VARCHAR2(30);
+    la_array        ARRAY := ARRAY();
+    la_array_val    ARRAY := ARRAY();
+  BEGIN
+  
+    lr_staff.created_by        := system_api_pkg.get_user_id;
+    lr_staff.creation_date     := SYSDATE;
+    lr_staff.last_updated_by   := system_api_pkg.get_user_id;
+    lr_staff.last_update_date  := SYSDATE;
+    lr_staff.last_update_login := system_api_pkg.get_client_session_id;
+  
+    lr_staff.staff_id          := hcm_staffs_s.nextval;
+    lr_staff.staff_num         := p_staff_num;
+    lr_staff.staff_name        := p_staff_name;
+    lr_staff.staff_description := p_staff_desc;
+    lr_staff.staff_phone       := p_staff_phone;
+    lr_staff.staff_email       := p_staff_email;
+    lr_staff.system_user_id    := p_sys_user_id;
+    lr_staff.department_code   := p_depet_code;
+    lr_staff.start_date        := p_start_date;
+    lr_staff.end_date          := p_end_date;
+    lr_staff.remark            := p_remark;
+  
+    INSERT INTO hcm_staffs VALUES lr_staff;
+  
+    x_staff_id := lr_staff.staff_id;
+  
+    IF p_property_list IS NOT NULL THEN
+    
+      la_array := system_api_pkg.spilt(p_text => p_property_list, p_separator => ';');
+    
+      FOR i IN 1 .. la_array.count LOOP
+      
+        la_array_val := system_api_pkg.spilt(p_text => la_array(i), p_separator => ':');
+      
+        BEGIN
+        
+          lv_property     := la_array_val(1);
+          lv_property_val := la_array_val(2);
+        EXCEPTION
+          WHEN OTHERS THEN
+            lv_property     := NULL;
+            lv_property_val := NULL;
+        END;
+      
+        IF lv_property IS NOT NULL THEN
+        
+          lr_property.created_by        := system_api_pkg.get_user_id;
+          lr_property.creation_date     := SYSDATE;
+          lr_property.last_updated_by   := system_api_pkg.get_user_id;
+          lr_property.last_update_date  := SYSDATE;
+          lr_property.last_update_login := system_api_pkg.get_client_session_id;
+        
+          lr_property.staff_id       := x_staff_id;
+          lr_property.property_name  := lv_property;
+          lr_property.property_value := lv_property_val;
+        
+          INSERT INTO hcm_staff_property VALUES lr_property;
+        
+        END IF;
+      
+      END LOOP;
+    
+    END IF;
+  
+    RETURN ln_message_id;
+  
+  EXCEPTION
+    WHEN dup_val_on_index THEN
+      RETURN - 100; --重复记录
+    WHEN OTHERS THEN
+      RETURN hcm_public_pck.insert_message(p_created_by => system_api_pkg.get_user_id,
+                                           p_message    => SQLCODE || '-' || SQLERRM,
+                                           p_prg_name   => 'hcm_staff_pck.insert_rows');
+  END;
+
+  FUNCTION update_rows(p_staff_id      IN NUMBER,
+                       p_staff_desc    IN VARCHAR2,
+                       p_staff_phone   IN VARCHAR2,
+                       p_staff_email   IN VARCHAR2,
+                       p_sys_user_id   IN NUMBER,
+                       p_depet_code    IN VARCHAR2,
+                       p_start_date    IN DATE,
+                       p_end_date      IN DATE,
+                       p_remark        IN VARCHAR2,
+                       p_property_list IN VARCHAR2) RETURN NUMBER IS
+    ln_message_id   NUMBER := system_api_pkg.g_success;
+    lv_property     VARCHAR2(30);
+    lv_property_val VARCHAR2(30);
+    la_array        ARRAY := ARRAY();
+    la_array_val    ARRAY := ARRAY();
+    lr_row          hcm_staff_property%ROWTYPE;
+  BEGIN
+  
+    UPDATE hcm_staffs hs
+       SET hs.staff_description = p_staff_desc,
+           hs.staff_phone       = p_staff_phone,
+           hs.staff_email       = p_staff_email,
+           hs.system_user_id    = p_sys_user_id,
+           hs.department_code   = p_depet_code,
+           hs.start_date        = p_start_date,
+           hs.end_date          = p_end_date,
+           hs.remark            = p_remark,
+           hs.last_updated_by   = system_api_pkg.get_user_id,
+           hs.last_update_date  = SYSDATE,
+           hs.last_update_login = system_api_pkg.get_client_session_id
+     WHERE hs.staff_id = p_staff_id;
+  
+    IF p_property_list IS NOT NULL THEN
+    
+      la_array := system_api_pkg.spilt(p_text => p_property_list, p_separator => ';');
+    
+      FOR i IN 1 .. la_array.count LOOP
+      
+        la_array_val := system_api_pkg.spilt(p_text => la_array(i), p_separator => ':');
+      
+        BEGIN
+        
+          lv_property     := la_array_val(1);
+          lv_property_val := la_array_val(2);
+        EXCEPTION
+          WHEN OTHERS THEN
+            lv_property     := NULL;
+            lv_property_val := NULL;
+        END;
+      
+        IF lv_property IS NOT NULL THEN
+        
+          UPDATE hcm_staff_property hsp
+             SET hsp.property_value = lv_property_val
+           WHERE hsp.staff_id = p_staff_id
+             AND hsp.property_name = lv_property;
+          --added by wangyang 20150408 前台第一次没有维护属性,时,第二次更改要新增
+          IF SQL%NOTFOUND THEN
+            lr_row.last_updated_by   := system_api_pkg.get_user_id;
+            lr_row.last_update_date  := SYSDATE;
+            lr_row.last_update_login := system_api_pkg.get_user_id;
+            lr_row.created_by        := system_api_pkg.get_user_id;
+            lr_row.creation_date     := SYSDATE;
+          
+            lr_row.staff_id       := p_staff_id;
+            lr_row.property_name  := lv_property;
+            lr_row.property_value := lv_property_val;
+          
+            INSERT INTO hcm_staff_property VALUES lr_row;
+          END IF;
+        
+        END IF;
+      
+      END LOOP;
+    
+    END IF;
+  
+    RETURN ln_message_id;
+  
+  EXCEPTION
+    WHEN dup_val_on_index THEN
+      RETURN - 100; --重复记录
+    WHEN OTHERS THEN
+      RETURN hcm_public_pck.insert_message(p_created_by => system_api_pkg.get_user_id,
+                                           p_message    => SQLCODE || '-' || SQLERRM,
+                                           p_prg_name   => 'hcm_staff_pck.update_rows');
+  END;
+
+  FUNCTION insert_rows_for_ui(p_staff_num     IN VARCHAR2,
+                              p_staff_name    IN VARCHAR2,
+                              p_staff_desc    IN VARCHAR2,
+                              p_staff_phone   IN VARCHAR2,
+                              p_staff_email   IN VARCHAR2,
+                              p_sys_user_id   IN VARCHAR2,
+                              p_depet_code    IN VARCHAR2,
+                              p_start_date    IN VARCHAR2,
+                              p_end_date      IN VARCHAR2,
+                              p_remark        IN VARCHAR2,
+                              p_property_list IN VARCHAR2) RETURN VARCHAR2 IS
+    ln_message_id NUMBER;
+    ld_start_date DATE;
+    ld_end_date   DATE;
+    ln_staff_id   NUMBER;
+  BEGIN
+    ld_start_date := to_date(p_start_date, 'yyyy-mm-dd hh24:mi:ss');
+    ld_end_date   := to_date(p_end_date, 'yyyy-mm-dd hh24:mi:ss');
+  
+    ln_message_id := insert_rows(p_staff_num     => p_staff_num,
+                                 p_staff_name    => p_staff_name,
+                                 p_staff_desc    => p_staff_desc,
+                                 p_staff_phone   => p_staff_phone,
+                                 p_staff_email   => p_staff_email,
+                                 p_sys_user_id   => to_number(p_sys_user_id),
+                                 p_depet_code    => p_depet_code,
+                                 p_start_date    => ld_start_date,
+                                 p_end_date      => ld_end_date,
+                                 p_remark        => p_remark,
+                                 p_property_list => p_property_list,
+                                 x_staff_id      => ln_staff_id);
+  
+    RETURN system_api_pkg.return_function_execute_result(p_status       => ln_message_id,
+                                                         p_msg          => hcm_public_pck.get_message_only(ln_message_id),
+                                                         p_reutrn_value => ln_staff_id);
+  
+  END;
+
+  FUNCTION update_rows_for_ui(p_staff_id      IN VARCHAR2,
+                              p_staff_desc    IN VARCHAR2,
+                              p_staff_phone   IN VARCHAR2,
+                              p_staff_email   IN VARCHAR2,
+                              p_sys_user_id   IN VARCHAR2,
+                              p_depet_code    IN VARCHAR2,
+                              p_start_date    IN VARCHAR2,
+                              p_end_date      IN VARCHAR2,
+                              p_remark        IN VARCHAR2,
+                              p_property_list IN VARCHAR2) RETURN VARCHAR2 IS
+    ln_message_id NUMBER;
+    ld_start_date DATE;
+    ld_end_date   DATE;
+  BEGIN
+    ld_start_date := to_date(p_start_date, 'yyyy-mm-dd hh24:mi:ss');
+    ld_end_date   := to_date(p_end_date, 'yyyy-mm-dd hh24:mi:ss');
+  
+    ln_message_id := update_rows(p_staff_id      => to_number(p_staff_id),
+                                 p_staff_desc    => p_staff_desc,
+                                 p_staff_phone   => p_staff_phone,
+                                 p_staff_email   => p_staff_email,
+                                 p_sys_user_id   => to_number(p_sys_user_id),
+                                 p_depet_code    => p_depet_code,
+                                 p_start_date    => ld_start_date,
+                                 p_end_date      => ld_end_date,
+                                 p_remark        => p_remark,
+                                 p_property_list => p_property_list);
+  
+    RETURN system_api_pkg.return_function_execute_result(p_status       => ln_message_id,
+                                                         p_msg          => hcm_public_pck.get_message_only(ln_message_id),
+                                                         p_reutrn_value => '');
+  
+  END;
+
+  FUNCTION del_staffs(p_staff_id IN NUMBER) RETURN NUMBER IS
+    ln_message_id NUMBER DEFAULT system_api_pkg.g_success;
+  BEGIN
+    DELETE FROM hcm_staffs WHERE staff_id = p_staff_id;
+    RETURN ln_message_id;
+  EXCEPTION
+    WHEN OTHERS THEN
+      RETURN hcm_public_pck.insert_message(p_created_by => system_api_pkg.get_user_id,
+                                           p_message    => SQLCODE || '-' || SQLERRM,
+                                           p_prg_name   => 'hcm_staff_pck.del_staffs');
+  END del_staffs;
+
+  FUNCTION del_staffs_for_ui(p_staff_id IN VARCHAR2) RETURN VARCHAR2 IS
+    ln_message_id NUMBER;
+    l_staff_id    NUMBER;
+  BEGIN
+    l_staff_id    := to_number(p_staff_id);
+    ln_message_id := del_staffs(l_staff_id);
+    RETURN system_api_pkg.return_function_execute_result(p_status       => ln_message_id,
+                                                         p_msg          => hcm_public_pck.get_message_only(ln_message_id),
+                                                         p_reutrn_value => '');
+  END del_staffs_for_ui;
+
